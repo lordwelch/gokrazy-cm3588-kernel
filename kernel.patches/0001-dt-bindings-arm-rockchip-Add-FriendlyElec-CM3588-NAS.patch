@@ -1,0 +1,37 @@
+From e6b6a82789baf275a597ef312a145c3b4a44da19 Mon Sep 17 00:00:00 2001
+From: Sebastian Kropatsch <seb-dev@mail.de>
+Date: Sun, 16 Jun 2024 23:48:29 +0200
+Subject: [PATCH 1/2] dt-bindings: arm: rockchip: Add FriendlyElec CM3588 NAS
+
+Add devicetree bindings for the FriendlyElec CM3588 NAS board.
+
+The CM3588 NAS by FriendlyElec pairs the CM3588 compute module, based on
+the Rockchip RK3588 SoC, with the CM3588 NAS Kit carrier board.
+
+Acked-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Signed-off-by: Sebastian Kropatsch <seb-dev@mail.de>
+---
+ Documentation/devicetree/bindings/arm/rockchip.yaml | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/arm/rockchip.yaml b/Documentation/devicetree/bindings/arm/rockchip.yaml
+index fcf7316ec..86379b8cc 100644
+--- a/Documentation/devicetree/bindings/arm/rockchip.yaml
++++ b/Documentation/devicetree/bindings/arm/rockchip.yaml
+@@ -236,6 +236,13 @@ properties:
+           - const: friendlyarm,nanopc-t6
+           - const: rockchip,rk3588
+ 
++      - description: FriendlyElec CM3588-based boards
++        items:
++          - enum:
++              - friendlyarm,cm3588-nas
++          - const: friendlyarm,cm3588
++          - const: rockchip,rk3588
++
+       - description: GeekBuying GeekBox
+         items:
+           - const: geekbuying,geekbox
+-- 
+2.45.2
+

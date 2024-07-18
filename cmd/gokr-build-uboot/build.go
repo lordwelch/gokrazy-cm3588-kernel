@@ -13,15 +13,15 @@ import (
 
 const ubootRev = "fd46ea0e701920eb205c2bce9d527bf0dec10b59"
 const ubootTS = 1720219003
-const trustedRepoRev = "10eb851f92acc67f7cdb955770e3bdced3026677"
+const trustedRepoRev = "c970c1c38f6d06a3e48e00ea7533c0e427311bcb"
 
 const (
 	uBootRepo           = "https://github.com/u-boot/u-boot"
 	trustedFirmwareRepo = "https://github.com/ARM-software/arm-trusted-firmware"
 )
 
-func applyPatches(srcdir string) error {
-	patches, err := filepath.Glob("*.patch")
+func applyPatches(srcdir, t string) error {
+	patches, err := filepath.Glob(t+".patches/*.patch")
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func applyPatches(srcdir string) error {
 }
 
 func compile(trustedFirmwareDir string) error {
-	defconfig := exec.Command("make", "ARCH=arm64", "rock64-rk3328_defconfig")
+	defconfig := exec.Command("make", "ARCH=arm64", "nanopc-t6-rk3588_defconfig")
 	defconfig.Stdout = os.Stdout
 	defconfig.Stderr = os.Stderr
 	if err := defconfig.Run(); err != nil {
@@ -70,7 +70,8 @@ func compile(trustedFirmwareDir string) error {
 		"ARCH=arm64",
 		"CROSS_COMPILE=aarch64-linux-gnu-",
 		"SOURCE_DATE_EPOCH="+strconv.Itoa(ubootTS),
-		fmt.Sprintf("BL31=%s/build/rk3328/release/bl31/bl31.elf", trustedFirmwareDir),
+		fmt.Sprintf("BL31=%s/build/rk3588/release/bl31/bl31.elf", trustedFirmwareDir),
+		fmt.Sprintf("ROCKCHIP_TPL=%s","/usr/src/uboot.patches/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.16.bin"),
 	)
 	make.Stdout = os.Stdout
 	make.Stderr = os.Stderr
@@ -140,7 +141,23 @@ func main() {
 		{"git", "remote", "add", "origin", trustedFirmwareRepo},
 		{"git", "fetch", "--depth=1", "origin", trustedRepoRev},
 		{"git", "checkout", "FETCH_HEAD"},
-		{"make", "SOURCE_DATE_EPOCH=1600000000", "CROSS_COMPILE=aarch64-linux-gnu-", "PLAT=rk3328"},
+	} {
+		log.Printf("Running %s", cmd)
+		cmdObj := exec.Command(cmd[0], cmd[1:]...)
+		cmdObj.Stdout = os.Stdout
+		cmdObj.Stderr = os.Stderr
+		cmdObj.Dir = trustedFirmwareDir
+		if err := cmdObj.Run(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	log.Printf("applying patches")
+	if err := applyPatches(trustedFirmwareDir, "atf"); err != nil {
+		log.Fatal(err)
+	}
+	for _, cmd := range [][]string{
+		{"make", "SOURCE_DATE_EPOCH=1600000000", "CROSS_COMPILE=aarch64-linux-gnu-", "PLAT=rk3588"},
 	} {
 		log.Printf("Running %s", cmd)
 		cmdObj := exec.Command(cmd[0], cmd[1:]...)
@@ -153,7 +170,7 @@ func main() {
 	}
 
 	var bootCmdPath string
-	if p, err := filepath.Abs("boot.cmd"); err != nil {
+	if p, err := filepath.Abs("uboot.patches/boot.cmd"); err != nil {
 		log.Fatal(err)
 	} else {
 		bootCmdPath = p
@@ -180,7 +197,7 @@ func main() {
 	}
 
 	log.Printf("applying patches")
-	if err := applyPatches(ubootDir); err != nil {
+	if err := applyPatches(ubootDir, "uboot"); err != nil {
 		log.Fatal(err)
 	}
 

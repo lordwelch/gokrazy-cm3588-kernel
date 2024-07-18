@@ -18,6 +18,7 @@ const dockerFileContents = `
 FROM debian:bullseye
 
 RUN apt-get update && apt-get install -y crossbuild-essential-arm64 bc libssl-dev bison flex
+RUN mkdir -p /usr/src/kernel.patches
 
 COPY gokr-build-kernel /usr/bin/gokr-build-kernel
 {{- range $idx, $path := .Patches }}
@@ -41,8 +42,43 @@ var dockerFileTmpl = template.Must(template.New("dockerfile").
 	Parse(dockerFileContents))
 
 var patchFiles = []string{
-	// "0001-ODROID-XU4-regulator-s2mps11-call-shutdown-function-.patch",
-	// "0002-ODROID-XU4-regulator-s2mps11-add-ethernet-power-rese.patch",
+	"kernel.patches/0001-dt-bindings-arm-rockchip-Add-FriendlyElec-CM3588-NAS.patch",
+	"kernel.patches/0002-arm64-dts-rockchip-Add-FriendlyElec-CM3588-NAS-board.patch",
+	"kernel.patches/0010-fix-clk-divisions.patch",
+	"kernel.patches/0011-irqchip-fix-its-timeout-issue.patch",
+	"kernel.patches/0012-fix-initial-PERST-GPIO-value.patch",
+	"kernel.patches/0022-RK3588-Add-Thermal-and-CpuFreq-Support.patch",
+	"kernel.patches/0024-RK3588-Add-Crypto-Support.patch",
+	"kernel.patches/0025-RK3588-Add-HW-RNG-Support.patch",
+	"kernel.patches/0026-RK3588-Add-VPU121-H.264-Decoder-Support.patch",
+	"kernel.patches/0027-RK3588-Add-rkvdec2-Support-v3.patch",
+	"kernel.patches/0028-media-v4l2-core-Initialize-h264-frame_mbs_only_flag-.patch",
+	"kernel.patches/0138-arm64-dts-rockchip-Add-HDMI0-bridge-to-rk3588.patch",
+	"kernel.patches/0139-arm64-dts-rockchip-Enable-HDMI0-PHY-clk-provider-on-.patch",
+	"kernel.patches/0144-phy-phy-rockchip-samsung-hdptx-Add-FRL-EARC-support.patch",
+	"kernel.patches/0145-phy-phy-rockchip-samsung-hdptx-Add-clock-provider.patch",
+	"kernel.patches/0146-drm-rockchip-vop2-Improve-display-modes-handling-on-.patch",
+	"kernel.patches/0147-arm64-dts-rockchip-rk3588-add-RGA2-node.patch",
+	"kernel.patches/0161-drm-bridge-synopsys-Add-initial-support-for-DW-HDMI-Controller.patch",
+	"kernel.patches/0162-drm-bridge-synopsys-Fix-HDMI-Controller.patch",
+	"kernel.patches/0170-drm-rockchip-vop2-add-clocks-reset-support.patch",
+	"kernel.patches/0801-wireless-add-bcm43752.patch",
+	"kernel.patches/0802-wireless-add-clk-property.patch",
+	"kernel.patches/1010-arm64-dts-rock-5b-Slow-down-emmc-to-hs200-and-add-ts.patch",
+	"kernel.patches/1011-board-rock-5b-arm64-dts-enable-spi-flash.patch",
+	"kernel.patches/1012-arm64-dts-rockchip-Enable-HDMI0-on-rock-5b.patch",
+	"kernel.patches/1014-arm64-dts-rockchip-Make-use-of-HDMI0-PHY-PLL-on-rock5b.patch",
+	"kernel.patches/1015-board-rock5b-automatic-fan-control.patch",
+	"kernel.patches/1020-Add-HDMI-and-VOP2-to-Rock-5A.patch",
+	"kernel.patches/1021-arch-arm64-dts-enable-gpu-node-for-rock-5a.patch",
+	"kernel.patches/1021-arm64-dts-Add-missing-nodes-to-Orange-Pi-5-Plus.patch",
+	"kernel.patches/1023-arm64-dts-rockchip-add-PCIe-for-M.2-E-Key-to-rock-5a.patch",
+	"kernel.patches/1031-arm64-dts-rockchip-Add-HDMI-support-to-ArmSoM-Sige7.patch",
+	"kernel.patches/1032-arm64-dts-rockchip-Add-ap6275p-wireless-support-to-A.patch",
+	"kernel.patches/1040-board-khadas-edge2-add-nodes.patch",
+	"kernel.patches/1041-board-khadas-edge2-mcu.patch",
+	"kernel.patches/1051-arm64-dts-rockchip-Add-NanoPC-T6-SPI-Flash.patch",
+	// "linux-6.10-rc7.tar.gz",
 }
 
 func copyFile(dest, src string) error {
@@ -135,8 +171,8 @@ func main() {
 	}
 	defer os.RemoveAll(tmp)
 
-	cmd := exec.Command("go", "install", "github.com/anupcshan/gokrazy-rock64-kernel/cmd/gokr-build-kernel")
-	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0", "GOBIN="+tmp)
+	cmd := exec.Command("go", "build", "-o", tmp, "github.com/anupcshan/gokrazy-rock64-kernel/cmd/gokr-build-kernel")
+	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		log.Fatalf("%v: %v", cmd.Args, err)
@@ -157,15 +193,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	dtbPath, err := find("rk3328-rock64.dtb")
+	dtbPath, err := find("rk3588-friendlyelec-cm3588-nas.dtb")
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	err = os.MkdirAll(filepath.Join(tmp, "kernel.patches"), 0750)
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Copy all files into the temporary directory so that docker
 	// includes them in the build context.
 	for _, path := range patchPaths {
-		if err := copyFile(filepath.Join(tmp, filepath.Base(path)), path); err != nil {
+		if err := copyFile(filepath.Join(tmp, "kernel.patches", filepath.Base(path)), path); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -239,7 +278,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := copyFile(dtbPath, filepath.Join(tmp, "rk3328-rock64.dtb")); err != nil {
+	if err := copyFile(dtbPath, filepath.Join(tmp, "rk3588-friendlyelec-cm3588-nas.dtb")); err != nil {
 		log.Fatal(err)
 	}
 }

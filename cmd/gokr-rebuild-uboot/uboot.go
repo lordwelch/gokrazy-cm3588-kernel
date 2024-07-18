@@ -19,6 +19,8 @@ FROM debian:bookworm
 RUN apt-get update && apt-get install -y crossbuild-essential-arm64 bc libssl-dev bison flex git python3 python3-setuptools swig python3-dev python3-pyelftools uuid-dev libgnutls28-dev
 
 COPY gokr-build-uboot /usr/bin/gokr-build-uboot
+RUN mkdir -p /usr/src/atf.patches
+RUN mkdir -p /usr/src/uboot.patches
 {{- range $idx, $path := .Patches }}
 COPY {{ $path }} /usr/src/{{ $path }}
 {{- end }}
@@ -39,7 +41,16 @@ var dockerFileTmpl = template.Must(template.New("dockerfile").
 	}).
 	Parse(dockerFileContents))
 
-var patchFiles = []string{"boot.cmd"}
+var ubootPatchFiles = []string{
+	"uboot.patches/boot.cmd",
+	"uboot.patches/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.16.bin",
+}
+var atfPatchFiles = []string{
+	"atf.patches/feat-rk3588-support-rk3588.patch",
+	"atf.patches/rk3588-enable-crypto-function.patch",
+	"atf.patches/feat-rockchip-support-SCMI-for-clock-reset-domain.patch",
+	"atf.patches/rockchip-add-some-pm-helpers-functions.patch",
+}
 
 func copyFile(dest, src string) error {
 	out, err := os.Create(dest)
@@ -131,8 +142,8 @@ func main() {
 	}
 	defer os.RemoveAll(tmp)
 
-	cmd := exec.Command("go", "install", "github.com/anupcshan/gokrazy-rock64-kernel/cmd/gokr-build-uboot")
-	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0", "GOBIN="+tmp)
+	cmd := exec.Command("go", "build", "-o", tmp, "github.com/anupcshan/gokrazy-rock64-kernel/cmd/gokr-build-uboot")
+	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		log.Fatalf("%v: %v", cmd.Args, err)
@@ -141,7 +152,8 @@ func main() {
 	buildPath := filepath.Join(tmp, "gokr-build-uboot")
 
 	var patchPaths []string
-	for _, filename := range patchFiles {
+
+	for _, filename := range ubootPatchFiles {
 		path, err := find(filename)
 		if err != nil {
 			log.Fatal(err)
@@ -149,10 +161,37 @@ func main() {
 		patchPaths = append(patchPaths, path)
 	}
 
+	err = os.MkdirAll(filepath.Join(tmp, "uboot.patches"), 0750)
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Copy all files into the temporary directory so that docker
 	// includes them in the build context.
 	for _, path := range patchPaths {
-		if err := copyFile(filepath.Join(tmp, filepath.Base(path)), path); err != nil {
+		if err = copyFile(filepath.Join(tmp, "uboot.patches", filepath.Base(path)), path); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+
+	patchPaths = patchPaths[0:0]
+	for _, filename := range atfPatchFiles {
+		path, err := find(filename)
+		if err != nil {
+			log.Fatal(err)
+		}
+		patchPaths = append(patchPaths, path)
+	}
+
+
+	err = os.MkdirAll(filepath.Join(tmp, "atf.patches"), 0750)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Copy all files into the temporary directory so that docker
+	// includes them in the build context.
+	for _, path := range patchPaths {
+		if err := copyFile(filepath.Join(tmp, "atf.patches", filepath.Base(path)), path); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -175,7 +214,7 @@ func main() {
 		Uid:       u.Uid,
 		Gid:       u.Gid,
 		BuildPath: buildPath,
-		Patches:   patchFiles,
+		Patches:   append(atfPatchFiles, ubootPatchFiles...),
 	}); err != nil {
 		log.Fatal(err)
 	}

@@ -19,7 +19,7 @@ import (
 var configContents []byte
 
 // see https://www.kernel.org/releases.json
-var latest = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.9.8.tar.xz"
+var latest = "https://git.kernel.org/torvalds/t/linux-6.10-rc7.tar.gz"
 
 func downloadKernel() error {
 	out, err := os.Create(filepath.Base(latest))
@@ -42,7 +42,7 @@ func downloadKernel() error {
 }
 
 func applyPatches(srcdir string) error {
-	patches, err := filepath.Glob("*.patch")
+	patches, err := filepath.Glob("kernel.patches/*.patch")
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func main() {
 		log.Fatalf("untar: %v", err)
 	}
 
-	srcdir := strings.TrimSuffix(filepath.Base(latest), ".tar.xz")
+	srcdir := strings.TrimSuffix(filepath.Base(latest), ".tar.gz")
 
 	log.Printf("applying patches")
 	if err := applyPatches(srcdir); err != nil {
@@ -172,7 +172,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := copyFile("/tmp/buildresult/rk3328-rock64.dtb", "arch/arm64/boot/dts/rockchip/rk3328-rock64.dtb"); err != nil {
+	if err := copyFile("/tmp/buildresult/rk3588-friendlyelec-cm3588-nas.dtb", "arch/arm64/boot/dts/rockchip/rk3588-friendlyelec-cm3588-nas.dtb"); err != nil {
 		log.Fatal(err)
 	}
 }
