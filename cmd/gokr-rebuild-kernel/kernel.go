@@ -15,7 +15,7 @@ import (
 )
 
 const dockerFileContents = `
-FROM debian:bullseye
+FROM debian:buster
 
 RUN apt-get update && apt-get install -y crossbuild-essential-arm64 bc libssl-dev bison flex
 RUN mkdir -p /usr/src/kernel.patches
