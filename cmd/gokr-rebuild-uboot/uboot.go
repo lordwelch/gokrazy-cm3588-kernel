@@ -49,7 +49,6 @@ var atfPatchFiles = []string{
 	"atf.patches/feat-rk3588-support-rk3588.patch",
 	"atf.patches/rk3588-enable-crypto-function.patch",
 	"atf.patches/feat-rockchip-support-SCMI-for-clock-reset-domain.patch",
-	"atf.patches/rockchip-add-some-pm-helpers-functions.patch",
 }
 
 func copyFile(dest, src string) error {
@@ -94,7 +93,7 @@ func find(filename string) (string, error) {
 		return filename, nil
 	}
 
-	path := filepath.Join(gopath, "src", "github.com", "anupcshan", "gokrazy-rock64-kernel", filename)
+	path := filepath.Join(gopath, "src", "gitea.narnian.us", "lordwelch", "gokrazy-cm3588-kernel", filename)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
@@ -142,7 +141,7 @@ func main() {
 	}
 	defer os.RemoveAll(tmp)
 
-	cmd := exec.Command("go", "build", "-o", tmp, "github.com/anupcshan/gokrazy-rock64-kernel/cmd/gokr-build-uboot")
+	cmd := exec.Command("go", "build", "-o", tmp, "gitea.narnian.us/lordwelch/gokrazy-cm3588-kernel/cmd/gokr-build-uboot")
 	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

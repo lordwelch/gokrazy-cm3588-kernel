@@ -19,7 +19,7 @@ import (
 var configContents []byte
 
 // see https://www.kernel.org/releases.json
-var latest = "https://git.kernel.org/torvalds/t/linux-6.10-rc7.tar.gz"
+var latest = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.10.tar.xz"
 
 func downloadKernel() error {
 	out, err := os.Create(filepath.Base(latest))
@@ -152,7 +152,7 @@ func main() {
 		log.Fatalf("untar: %v", err)
 	}
 
-	srcdir := strings.TrimSuffix(filepath.Base(latest), ".tar.gz")
+	srcdir := strings.TrimSuffix(filepath.Base(latest), ".tar.xz")
 
 	log.Printf("applying patches")
 	if err := applyPatches(srcdir); err != nil {

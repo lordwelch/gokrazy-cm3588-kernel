@@ -1,7 +1,10 @@
-From c805c14c1026b3ae5445e211c2101c60cd76ad0e Mon Sep 17 00:00:00 2001
+From 3e45797b2790492e2863441e24246536a33f1efd Mon Sep 17 00:00:00 2001
 From: XiaoDong Huang <derrick.huang@rock-chips.com>
 Date: Mon, 17 Jun 2024 10:55:27 +0800
 Subject: [PATCH] feat(rk3588): enable crypto function
+
+The CPU crypto is not default on when power up, need to enable it by
+software.
 
 Signed-off-by: XiaoDong Huang <derrick.huang@rock-chips.com>
 Change-Id: Ifee2eab55d9c13cef5f15926fb80016845e2a66d
