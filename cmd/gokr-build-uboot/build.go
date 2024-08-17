@@ -11,9 +11,9 @@ import (
 	"strconv"
 )
 
-const ubootRev = "fd46ea0e701920eb205c2bce9d527bf0dec10b59"
-const ubootTS = 1720219003
-const trustedRepoRev = "c970c1c38f6d06a3e48e00ea7533c0e427311bcb"
+const ubootRev = "a3cd0b4c632fff0f39013efebd419356eb6b4064"
+const ubootTS = 1723759665
+const trustedRepoRev = "a4e2a9f16d5c4620cd824294ef91a198fd276c80"
 
 const (
 	uBootRepo           = "https://github.com/u-boot/u-boot"
@@ -47,7 +47,7 @@ func applyPatches(srcdir, t string) error {
 }
 
 func compile(trustedFirmwareDir string) error {
-	defconfig := exec.Command("make", "ARCH=arm64", "nanopc-t6-rk3588_defconfig")
+	defconfig := exec.Command("make", "ARCH=arm64", "cm3588-nas-rk3588_defconfig")
 	defconfig.Stdout = os.Stdout
 	defconfig.Stderr = os.Stderr
 	if err := defconfig.Run(); err != nil {

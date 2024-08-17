@@ -23,7 +23,7 @@ index 111111111111..222222222222 100644
  static struct page *its_allocate_prop_table(gfp_t gfp_flags)
  {
  	struct page *prop_page;
-+	
++
 +	if (of_machine_is_compatible("rockchip,rk3568") || of_machine_is_compatible("rockchip,rk3566") || of_machine_is_compatible("rockchip,rk3588"))
 +		gfp_flags |= GFP_DMA32;
  
@@ -45,7 +45,7 @@ index 111111111111..222222222222 100644
 +	gfp_flags = GFP_KERNEL | __GFP_ZERO;
 +	if (of_machine_is_compatible("rockchip,rk3568") || of_machine_is_compatible("rockchip,rk3566") || of_machine_is_compatible("rockchip,rk3588"))
 +		gfp_flags |= GFP_DMA32;
-+	
++
 +	page = alloc_pages_node(its->numa_node, gfp_flags, order);
  	if (!page)
  		return -ENOMEM;
@@ -71,7 +71,7 @@ index 111111111111..222222222222 100644
  {
  	struct page *pend_page;
 -
-+	
++
 +	if (of_machine_is_compatible("rockchip,rk3568") || of_machine_is_compatible("rockchip,rk3566") || of_machine_is_compatible("rockchip,rk3588"))
 +		gfp_flags |= GFP_DMA32;
  	pend_page = alloc_pages(gfp_flags | __GFP_ZERO,
@@ -128,7 +128,7 @@ index 111111111111..222222222222 100644
  	sz = max(sz, ITS_ITT_ALIGN) + ITS_ITT_ALIGN - 1;
 -	itt = kzalloc_node(sz, GFP_KERNEL, its->numa_node);
 +	gfp_flags = GFP_KERNEL;
-+	
++
 +	if (of_machine_is_compatible("rockchip,rk3568") || of_machine_is_compatible("rockchip,rk3566") || of_machine_is_compatible("rockchip,rk3588")) {
 +		gfp_flags |= GFP_DMA32;
 +		itt = (void *)__get_free_pages(gfp_flags, get_order(sz));
@@ -167,13 +167,13 @@ index 111111111111..222222222222 100644
  	raw_spin_unlock_irqrestore(&its_dev->its->lock, flags);
  	kfree(its_dev->event_map.col_map);
 -	kfree(its_dev->itt);
-+	
++
 +	if (of_machine_is_compatible("rockchip,rk3568") ||
 +	    of_machine_is_compatible("rockchip,rk3566") || of_machine_is_compatible("rockchip,rk3588"))
 +		free_pages((unsigned long)its_dev->itt, get_order(its_dev->itt_sz));
 +	else
 +		kfree(its_dev->itt);
-+	
++
  	kfree(its_dev);
  }
  

@@ -94,7 +94,7 @@ func find(filename string) (string, error) {
 		return filename, nil
 	}
 
-	path := filepath.Join(gopath, "src", "github.com", "anupcshan", "gokrazy-rock64-kernel", filename)
+	path := filepath.Join(gopath, "src", "github", "lordwelch", "gokrazy-cm3588-kernel", filename)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
@@ -142,7 +142,7 @@ func main() {
 	}
 	defer os.RemoveAll(tmp)
 
-	cmd := exec.Command("go", "build", "-o", tmp, "github.com/anupcshan/gokrazy-rock64-kernel/cmd/gokr-build-uboot")
+	cmd := exec.Command("go", "build", "-o", tmp, "github/lordwelch/gokrazy-cm3588-kernel/cmd/gokr-build-uboot")
 	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

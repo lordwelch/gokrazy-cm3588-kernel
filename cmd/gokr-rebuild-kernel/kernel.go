@@ -46,7 +46,6 @@ var patchFiles = []string{
 	"kernel.patches/0002-arm64-dts-rockchip-Add-FriendlyElec-CM3588-NAS-board.patch",
 	"kernel.patches/0010-fix-clk-divisions.patch",
 	"kernel.patches/0011-irqchip-fix-its-timeout-issue.patch",
-	"kernel.patches/0012-fix-initial-PERST-GPIO-value.patch",
 	"kernel.patches/0022-RK3588-Add-Thermal-and-CpuFreq-Support.patch",
 	"kernel.patches/0024-RK3588-Add-Crypto-Support.patch",
 	"kernel.patches/0025-RK3588-Add-HW-RNG-Support.patch",
@@ -78,7 +77,6 @@ var patchFiles = []string{
 	"kernel.patches/1040-board-khadas-edge2-add-nodes.patch",
 	"kernel.patches/1041-board-khadas-edge2-mcu.patch",
 	"kernel.patches/1051-arm64-dts-rockchip-Add-NanoPC-T6-SPI-Flash.patch",
-	// "linux-6.10-rc7.tar.gz",
 }
 
 func copyFile(dest, src string) error {
@@ -123,7 +121,7 @@ func find(filename string) (string, error) {
 		return filename, nil
 	}
 
-	path := filepath.Join(gopath, "src", "github.com", "anupcshan", "gokrazy-rock64-kernel", filename)
+	path := filepath.Join(gopath, "src", "github.com", "lordwelch", "gokrazy-cm3588-kernel", filename)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
@@ -171,7 +169,7 @@ func main() {
 	}
 	defer os.RemoveAll(tmp)
 
-	cmd := exec.Command("go", "build", "-o", tmp, "github.com/anupcshan/gokrazy-rock64-kernel/cmd/gokr-build-kernel")
+	cmd := exec.Command("go", "build", "-o", tmp, "github.com/lordwelch/gokrazy-cm3588-kernel/cmd/gokr-build-kernel")
 	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -204,7 +202,7 @@ func main() {
 	// Copy all files into the temporary directory so that docker
 	// includes them in the build context.
 	for _, path := range patchPaths {
-		if err := copyFile(filepath.Join(tmp, "kernel.patches", filepath.Base(path)), path); err != nil {
+		if err := copyFile(filepath.Join(tmp, path), path); err != nil {
 			log.Fatal(err)
 		}
 	}

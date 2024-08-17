@@ -1,3 +1,3 @@
-module github.com/anupcshan/gokrazy-rock64-kernel
+module github.com/lordwelch/gokrazy-cm3588-kernel
 
 go 1.22
