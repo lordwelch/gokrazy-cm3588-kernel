@@ -137,6 +137,14 @@ func compile(cross, flavor string) error {
 		return fmt.Errorf("make: %v", err)
 	}
 
+	make = exec.Command("make", "INSTALL_DTBS_PATH=/tmp/buildresult/dtbs", "dtbs_install", "-j"+strconv.Itoa(runtime.NumCPU()))
+	make.Env = env
+	make.Stdout = os.Stdout
+	make.Stderr = os.Stderr
+	if err := make.Run(); err != nil {
+		return fmt.Errorf("make: %v", err)
+	}
+
 	return nil
 }
 
