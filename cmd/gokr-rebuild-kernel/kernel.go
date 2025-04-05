@@ -15,7 +15,7 @@ import (
 )
 
 const dockerFileContents = `
-FROM debian:bullseye
+FROM debian:buster
 
 RUN apt-get update && apt-get install -y crossbuild-essential-arm64 bc libssl-dev bison flex
 RUN mkdir -p /usr/src/kernel.patches
@@ -121,7 +121,7 @@ func find(filename string) (string, error) {
 		return filename, nil
 	}
 
-	path := filepath.Join(gopath, "src", "github.com", "lordwelch", "gokrazy-cm3588-kernel", filename)
+	path := filepath.Join(gopath, "src", "gitea.narnian.us", "lordwelch", "gokrazy-cm3588-kernel", filename)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
@@ -169,7 +169,7 @@ func main() {
 	}
 	defer os.RemoveAll(tmp)
 
-	cmd := exec.Command("go", "build", "-o", tmp, "github.com/lordwelch/gokrazy-cm3588-kernel/cmd/gokr-build-kernel")
+	cmd := exec.Command("go", "build", "-o", tmp, "gitea.narnian.us/lordwelch/gokrazy-cm3588-kernel/cmd/gokr-build-kernel")
 	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
