@@ -14,9 +14,9 @@ import (
 )
 
 const dockerFileContents = `
-FROM debian:buster
+FROM docker.io/library/debian:trixie
 
-RUN apt-get update && apt-get install -y crossbuild-essential-arm64 bc libssl-dev bison flex git python3 python3-setuptools swig python3-dev python3-pyelftools uuid-dev libgnutls28-dev
+RUN apt-get update && apt-get install -y build-essential crossbuild-essential-arm64 bc libssl-dev bison flex git python3 python3-setuptools swig python3-dev python3-pyelftools uuid-dev libgnutls28-dev
 
 COPY gokr-build-uboot /usr/bin/gokr-build-uboot
 RUN mkdir -p /usr/src/atf.patches
@@ -46,9 +46,9 @@ var ubootPatchFiles = []string{
 	"uboot.patches/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.16.bin",
 }
 var atfPatchFiles = []string{
-	"atf.patches/feat-rk3588-support-rk3588.patch",
-	"atf.patches/rk3588-enable-crypto-function.patch",
-	"atf.patches/feat-rockchip-support-SCMI-for-clock-reset-domain.patch",
+	// "atf.patches/feat-rk3588-support-rk3588.patch",
+	// "atf.patches/rk3588-enable-crypto-function.patch",
+	// "atf.patches/feat-rockchip-support-SCMI-for-clock-reset-domain.patch",
 }
 
 func copyFile(dest, src string) error {

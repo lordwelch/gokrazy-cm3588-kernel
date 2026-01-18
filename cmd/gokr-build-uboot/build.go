@@ -9,15 +9,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 )
-
-const ubootRev = "a3cd0b4c632fff0f39013efebd419356eb6b4064"
-const ubootTS = 1723759665
-const trustedRepoRev = "a4e2a9f16d5c4620cd824294ef91a198fd276c80"
 
 const (
 	uBootRepo           = "https://github.com/u-boot/u-boot"
+	ubootRev            = "ff498a3c5efb424accc1d825cc45cede2540ca13"
 	trustedFirmwareRepo = "https://github.com/ARM-software/arm-trusted-firmware"
+	trustedRepoRev      = "6251d6ed1ffa7080edc55fa75f525e19ecf5edbd"
 )
 
 func applyPatches(srcdir, t string) error {
@@ -54,7 +53,7 @@ func compile(trustedFirmwareDir string) error {
 		return fmt.Errorf("make defconfig: %v", err)
 	}
 
-	f, err := os.OpenFile(".config", os.O_RDWR|os.O_APPEND, 0755)
+	f, err := os.OpenFile(".config", os.O_RDWR|os.O_APPEND, 0o755)
 	if err != nil {
 		return err
 	}
@@ -65,11 +64,17 @@ func compile(trustedFirmwareDir string) error {
 		return err
 	}
 
+	cmd := exec.Command("git", "show", "-s", "--date=unix", "--pretty=format:%ad", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("unable to get date of git repo: %w", err)
+	}
+
 	make := exec.Command("make", "-j"+strconv.Itoa(runtime.NumCPU()))
 	make.Env = append(os.Environ(),
 		"ARCH=arm64",
 		"CROSS_COMPILE=aarch64-linux-gnu-",
-		"SOURCE_DATE_EPOCH="+strconv.Itoa(ubootTS),
+		"SOURCE_DATE_EPOCH="+strings.TrimSpace(string(output)),
 		fmt.Sprintf("BL31=%s/build/rk3588/release/bl31/bl31.elf", trustedFirmwareDir),
 		fmt.Sprintf("ROCKCHIP_TPL=%s", "/usr/src/uboot.patches/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.16.bin"),
 	)

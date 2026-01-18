@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 )
+var firmware = []string{"arm/mali/arch10.8/mali_csffw.bin", "rtl_nic/rtl8125b-2.fw"}
+var firmwareDir, _ = filepath.Abs("firmware")
 
 func downloadKernel(latest string) error {
 	if _, err := os.Stat(filepath.Base(latest)); err == nil {
@@ -44,6 +47,79 @@ func downloadKernel(latest string) error {
 	return out.Close()
 }
 
+
+func downloadWhence() (map[string]string, error) {
+	whenceMap := make(map[string]string)
+	uri := "https://gitlab.com/api/v4/projects/48890189/repository/files/WHENCE/raw?ref=main"
+	resp, err := http.Get(uri)
+	if err != nil {
+		return whenceMap, err
+	}
+	defer resp.Body.Close()
+	whenceBytes,err := io.ReadAll(resp.Body)
+	if err != nil {
+		return whenceMap, err
+	}
+	whence := strings.Split(string(whenceBytes), "\n")
+	for _,line := range whence {
+		if file,ok := strings.CutPrefix(line, "File: "); ok {
+			whenceMap[file] = file
+		}
+		if file,ok := strings.CutPrefix(line, "RawFile: "); ok {
+			whenceMap[file] = file
+		}
+		if l,ok := strings.CutPrefix(line, "Link: "); ok {
+			if link, file, ok := strings.Cut(l, " -> "); ok {
+				dest := filepath.Join(filepath.Dir(link), file)
+				whenceMap[link] = dest
+			}
+		}
+	}
+	return whenceMap, nil
+}
+func downloadFirmware() ([]string, error) {
+	firmwarePaths := make([]string, 0, len(firmware))
+	whence, err := downloadWhence()
+	if err != nil {
+		return firmwarePaths, err
+	}
+	for _, f := range firmware{
+		folder := filepath.Dir(f)
+		path, ok := whence[f]
+		if !ok {
+			return firmwarePaths, fmt.Errorf("firmware %q not found", f)
+		}
+
+		firmwarePaths = append(firmwarePaths, f)
+
+		log.Printf("downloading firmware: %q to %q", path, f)
+
+		os.MkdirAll(filepath.Join("firmware", folder), 0777)
+		out, err := os.Create(filepath.Join("firmware", f))
+		if err != nil {
+			return firmwarePaths, err
+		}
+		defer out.Close()
+		uri := "https://gitlab.com/api/v4/projects/48890189/repository/files/" + url.PathEscape(path) + "/raw?ref=main"
+		resp, err := http.Get(uri)
+		if err != nil {
+			return firmwarePaths, err
+		}
+		defer resp.Body.Close()
+		if got, want := resp.StatusCode, http.StatusOK; got != want {
+			return firmwarePaths, fmt.Errorf("unexpected HTTP status code for %s: got %d, want %d", uri, got, want)
+		}
+		if _, err := io.Copy(out, resp.Body); err != nil {
+			return firmwarePaths, err
+		}
+		if err := out.Close(); err != nil {
+			return firmwarePaths, err
+		}
+		resp.Body.Close()
+	}
+	return firmwarePaths, nil
+}
+
 func applyPatches(srcdir string) error {
 	patches, err := filepath.Glob("*.patch")
 	if err != nil {
@@ -70,8 +146,11 @@ func applyPatches(srcdir string) error {
 	return nil
 }
 
-func compile(cross, flavor string) error {
+func compile(cross, flavor string, firmwarePaths []string, tiny bool) error {
 	defconfig := exec.Command("make", "defconfig")
+	if tiny {
+		defconfig = exec.Command("make", "tinyconfig")
+	}
 	if flavor == "raspberrypi" {
 		// TODO(https://github.com/gokrazy/gokrazy/issues/223): is it
 		// necessary/desirable to switch to bcm2712_defconfig?
@@ -105,6 +184,11 @@ func compile(cross, flavor string) error {
 	if _, err := f.Write(addendum); err != nil {
 		return err
 	}
+	if len(firmwarePaths) > 0 {
+		fmt.Fprintf(f, "CONFIG_EXTRA_FIRMWARE=%q\n", strings.Join(firmwarePaths, " "))
+		fmt.Fprintf(f, "CONFIG_EXTRA_FIRMWARE_DIR=%q\n",firmwareDir)
+	}
+
 	if err := f.Close(); err != nil {
 		return err
 	}
@@ -159,6 +243,7 @@ func indockerMain() {
 	flavor := flag.String("flavor",
 		"vanilla",
 		"which kernel flavor to build. one of vanilla (kernel.org) or raspberrypi (https://github.com/raspberrypi/linux/tags)")
+	tiny := flag.Bool("tiny", false, "Tries to use tinyconfig instead of defconfig")
 
 	flag.Parse()
 	latest := flag.Arg(0)
@@ -171,11 +256,34 @@ func indockerMain() {
 	}
 
 	log.Printf("unpacking kernel source")
-	untar := exec.Command("tar", "xf", filepath.Base(latest))
-	untar.Stdout = os.Stdout
-	untar.Stderr = os.Stderr
-	if err := untar.Run(); err != nil {
-		log.Fatalf("untar: %v", err)
+	// untar := exec.Command("tar", "xkf", filepath.Base(latest))
+	// untar.Stdout = os.Stdout
+	// untar.Stderr = os.Stderr
+	// if err := untar.Run(); err != nil {
+	// 	log.Fatalf("untar: %v", err)
+	// }
+	srcFiles, err := filepath.Glob("/usr/_src/*")
+	if err != nil {
+		log.Fatalf("failed to find source files: %v", err)
+	}
+	for _, fileName := range srcFiles {
+		file, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0o644)
+		if err != nil {
+			log.Fatalf("Unable to open source file for writing: %s", filepath.Base(fileName))
+		}
+		newFile, err := os.OpenFile(filepath.Base(fileName), os.O_CREATE|os.O_RDWR, 0o644)
+		if err != nil {
+			log.Fatalf("Unable to open source file for writing: %s", filepath.Base(fileName))
+		}
+		_, err = io.Copy(newFile, file)
+		if err != nil {
+			log.Fatalf("Error when copying file %v: %v", fileName, err)
+		}
+		file.Close()
+		newFile.Close()
+		if err != nil {
+			log.Fatalf("Failed to rename %v: %v", fileName, err)
+		}
 	}
 
 	srcdir := strings.TrimSuffix(filepath.Base(latest), ".tar.xz")
@@ -184,7 +292,11 @@ func indockerMain() {
 	}
 
 	log.Printf("applying patches")
-	if err := applyPatches(srcdir); err != nil {
+	// if err := applyPatches(srcdir); err != nil {
+	// 	log.Fatal(err)
+	// }
+	firmwarePaths, err := downloadFirmware()
+	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -198,8 +310,9 @@ func indockerMain() {
 		os.Setenv("CROSS_COMPILE", "aarch64-linux-gnu-")
 	}
 
+
 	log.Printf("compiling kernel")
-	if err := compile(*cross, *flavor); err != nil {
+	if err := compile(*cross, *flavor, firmwarePaths, *tiny); err != nil {
 		log.Fatal(err)
 	}
 
@@ -207,15 +320,25 @@ func indockerMain() {
 		if err := copyFile("/tmp/buildresult/vmlinuz", "arch/arm64/boot/Image"); err != nil {
 			log.Fatal(err)
 		}
+		if err := copyFile("/tmp/buildresult/vmlinuz.config", ".config"); err != nil {
+			log.Fatal(err)
+		}
 
 		switch *flavor {
 		case "vanilla":
-			cp := exec.Command("cp", "-r", filepath.Join("arch/arm64/boot/dts/"), "/tmp/buildresult/dts")
-			cp.Stdout = os.Stdout
-			cp.Stderr = os.Stderr
-			log.Printf("%v", cp.Args)
-			if err := cp.Run(); err != nil {
-				log.Fatalf("%v: %v", cp.Args, err)
+			// cp := exec.Command("cp", "-r", filepath.Join("arch/arm64/boot/dts/"), "/tmp/buildresult/dts")
+			// cp.Stdout = os.Stdout
+			// cp.Stderr = os.Stderr
+			// log.Printf("%v", cp.Args)
+			// if err := cp.Run(); err != nil {
+			// 	log.Fatalf("%v: %v", cp.Args, err)
+			// }
+			for dest, source := range map[string]string{
+				"rk3588-friendlyelec-cm3588-nas.dtb":      "rockchip/rk3588-friendlyelec-cm3588-nas.dtb",
+			} {
+				if err := copyFile("/tmp/buildresult/"+dest, "arch/arm64/boot/dts/"+source); err != nil {
+					log.Fatal(err)
+				}
 			}
 
 		case "raspberrypi":

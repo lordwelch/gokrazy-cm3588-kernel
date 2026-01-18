@@ -16,7 +16,7 @@ import (
 )
 
 const dockerFileContents = `
-FROM debian:bookworm
+FROM docker.io/library/debian:trixie
 
 RUN apt-get update && apt-get install -y \
 {{ if (eq .Cross "arm64") -}}
@@ -25,13 +25,15 @@ RUN apt-get update && apt-get install -y \
   build-essential bc libssl-dev bison flex libelf-dev ncurses-dev ca-certificates zstd kmod python3
 
 COPY gokr-rebuild-kernel /usr/bin/gokr-rebuild-kernel
-COPY config.addendum.txt /usr/src/config.addendum.txt
+COPY config.addendum.txt /usr/_src/config.addendum.txt
+COPY config.addendum.txt /usr/_src/.config
+COPY config.addendum.txt /usr/src/.config
 {{- range $idx, $path := .Patches }}
-COPY {{ $path }} /usr/src/{{ $path }}
+COPY patch/{{ $path }} /usr/_src/{{ $path }}
 {{- end }}
 
 RUN echo 'builduser:x:{{ .Uid }}:{{ .Gid }}:nobody:/:/bin/sh' >> /etc/passwd && \
-    chown -R {{ .Uid }}:{{ .Gid }} /usr/src
+    chown -R {{ .Uid }}:{{ .Gid }} /usr/src /usr/_src
 
 USER builduser
 WORKDIR /usr/src
@@ -113,8 +115,9 @@ func rebuildKernel() error {
 		"do not delete build container after building the kernel")
 
 	cross := flag.String("cross",
-		"",
+		"arm64",
 		"if non-empty, cross-compile for the specified arch (one of 'arm64')")
+	tiny := flag.Bool("tiny", false, "Tries to use tinyconfig instead of defconfig")
 
 	flavor := flag.String("flavor",
 		"vanilla",
@@ -123,7 +126,7 @@ func rebuildKernel() error {
 	dtbs := flag.String("dtbs",
 		"raspberrypi",
 		"which device tree files (.dtb files) to copy. 'raspberrypi' or empty")
-
+	_ = dtbs
 	flag.Parse()
 
 	if *cross != "" && *cross != "arm64" {
@@ -154,13 +157,11 @@ func rebuildKernel() error {
 
 	execName := filepath.Base(executable)
 
-	var patchPaths []string
 	for _, filename := range patches {
-		path, err := find(filename)
+		_, err := find("patch/" + filename)
 		if err != nil {
 			return err
 		}
-		patchPaths = append(patchPaths, path)
 	}
 
 	kernelPath, err := find("../vmlinuz")
@@ -236,12 +237,15 @@ func rebuildKernel() error {
 		// "--platform=linux/amd64",
 		"--volume", abs + ":/tmp/buildresult:Z",
 	}
-	kernel_name := path.Base(string(upstreamURL))
-	_, err = os.Stat(kernel_name)
-	log.Printf("Checking for downloaded kernel %s: %v", kernel_name, err)
+	kernelName := path.Base(string(upstreamURL))
+	_, err = os.Stat(kernelName)
+	log.Printf("Checking for downloaded kernel %s: %v", kernelName, err)
+	// dockerArgs = append(dockerArgs, fmt.Sprintf("--mount=type=tmpfs,tmpfs-size=%d%s,destination=%s,U", 5, "G", "/usr/src")) // Ramfs for faster build.... maybe
+	os.MkdirAll("./src_build", 0o777)
+	dockerArgs = append(dockerArgs, "-v", "./src_build:/usr/src")
 	if err == nil {
-		abs, _ := filepath.Abs(kernel_name)
-		dockerArgs = append(dockerArgs, "--volume", abs+":/usr/src/"+kernel_name)
+		absKernelName, _ := filepath.Abs(kernelName)
+		dockerArgs = append(dockerArgs, "--volume", absKernelName+":/usr/src/"+kernelName)
 	}
 
 	if !*keepBuildContainer {
@@ -254,6 +258,7 @@ func rebuildKernel() error {
 		"gokr-rebuild-kernel",
 		"-cross="+*cross,
 		"-flavor="+*flavor,
+		fmt.Sprintf("-tiny=%v", *tiny),
 		strings.TrimSpace(string(upstreamURL)))
 
 	dockerRun = exec.Command(executable, dockerArgs...)
@@ -264,8 +269,12 @@ func rebuildKernel() error {
 	if err := dockerRun.Run(); err != nil {
 		return fmt.Errorf("%s run: %v (cmd: %v)", execName, err, dockerRun.Args)
 	}
-
+	_=kernelPath
 	if err := copyFile(kernelPath, "vmlinuz"); err != nil {
+		return err
+	}
+
+	if err := copyFile(kernelPath+".config", "vmlinuz.config"); err != nil {
 		return err
 	}
 
@@ -300,14 +309,15 @@ func rebuildKernel() error {
 	}
 
 	if *cross == "arm64" {
+		// downloadFirmware()
 		if *dtbs != "" {
 			// replace device tree files
-			rm = exec.Command("sh", "-c", "rm ../*.dtb")
+			rm = exec.Command("sh", "-c", "rm -f ../*.dtb")
 			rm.Stdout = os.Stdout
 			rm.Stderr = os.Stderr
 			log.Printf("%v", rm.Args)
 			if err := rm.Run(); err != nil {
-				return fmt.Errorf("%v: %v", rm.Args, err)
+				log.Printf("%v: %v", rm.Args, err)
 			}
 			cp = exec.Command("sh", "-c", "cp *.dtb ..")
 			cp.Stdout = os.Stdout
@@ -329,7 +339,7 @@ func rebuildKernel() error {
 			rm.Stderr = os.Stderr
 			log.Printf("%v", rm.Args)
 			if err := rm.Run(); err != nil {
-				return fmt.Errorf("%v: %v", rm.Args, err)
+				log.Printf("%v: %v", rm.Args, err)
 			}
 			cp = exec.Command("cp", "-r", "overlays", overlaysPath)
 			cp.Stdout = os.Stdout
@@ -343,6 +353,71 @@ func rebuildKernel() error {
 
 	return nil
 }
+
+// func _downloadFirmware() (*os.File, int64, error) {
+// 	latest := "https://gitlab.com/freedesktop-sdk/mirrors/kernel/linux/kernel/git/firmware/linux-firmware/-/raw/main/arm/mali/arch10.8/mali_csffw.bin"
+// 	if st, err := os.Stat(filepath.Base(latest)); err == nil {
+// 		out, err := os.Open(filepath.Base(latest))
+// 		if err != nil {
+// 			return nil, 0, nil
+// 		}
+// 		return out, st.Size(), nil
+// 	}
+// 	out, err := os.Create(filepath.Base(latest))
+// 	if err != nil {
+// 		return nil, 0, err
+// 	}
+// 	resp, err := http.Get(latest)
+// 	if err != nil {
+// 		out.Close()
+// 		return out, 0, err
+// 	}
+// 	defer resp.Body.Close()
+// 	if got, want := resp.StatusCode, http.StatusOK; got != want {
+// 		out.Close()
+// 		return out, 0, fmt.Errorf("unexpected HTTP status code for %s: got %d, want %d", latest, got, want)
+// 	}
+// 	size, err := io.Copy(out, resp.Body)
+// 	if err != nil {
+// 		out.Close()
+// 		return out, 0, err
+// 	}
+// 	if _, err := out.Seek(0, os.SEEK_SET); err != nil {
+// 		out.Close()
+// 		return out, 0, err
+// 	}
+// 	return out, size, nil
+// }
+
+// func downloadFirmware() error {
+// 	firmwareFile, size, err := _downloadFirmware()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer firmwareFile.Close()
+// 	err = os.MkdirAll("../_gokrazy", os.ModePerm)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	f, err := os.Create("../_gokrazy/extrafiles.tar")
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer f.Close()
+// 	t := tar.NewWriter(f)
+// 	if err := t.WriteHeader(&tar.Header{
+// 		Name:     "/lib/firmware/arm/mali/arch10.8/mali_csffw.bin",
+// 		Typeflag: tar.TypeReg,
+// 		Mode:     0o755,
+// 		Size:     size,
+// 	}); err != nil {
+// 		return err
+// 	}
+// 	if _, err := io.Copy(t, firmwareFile); err != nil {
+// 		return err
+// 	}
+// 	return t.Close()
+// }
 
 func main() {
 	if os.Getenv("GOKRAZY_IN_DOCKER") == "1" {
