@@ -57,7 +57,11 @@ func compile(trustedFirmwareDir string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write([]byte("CONFIG_CMD_SETEXPR=y\nCONFIG_CMD_SETEXPR_FMT=y\n")); err != nil {
+	if _, err := f.Write([]byte(`
+CONFIG_CMD_SETEXPR=y
+CONFIG_CMD_SETEXPR_FMT=y
+CONFIG_BOOTCOMMAND="setenv bootmeths script; bootflow scan -lb"
+`)); err != nil {
 		return err
 	}
 	if err := f.Close(); err != nil {
