@@ -134,6 +134,27 @@ func copyFile(dest, src string) error {
 	return out.Close()
 }
 
+func clone(dir string, repo string, rev string) error {
+
+
+	for _, cmd := range [][]string{
+		{"git", "init"},
+		{"git", "remote", "add", "origin", repo},
+		{"git", "fetch", "--depth=1", "origin", rev},
+		{"git", "checkout", "FETCH_HEAD"},
+	} {
+		log.Printf("Running %s", cmd)
+		cmdObj := exec.Command(cmd[0], cmd[1:]...)
+		cmdObj.Stdout = os.Stdout
+		cmdObj.Stderr = os.Stderr
+		cmdObj.Dir = dir
+		if err := cmdObj.Run(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func main() {
 	ubootDir, err := os.MkdirTemp("", "u-boot")
 	if err != nil {
@@ -145,20 +166,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	for _, cmd := range [][]string{
-		{"git", "init"},
-		{"git", "remote", "add", "origin", trustedFirmwareRepo},
-		{"git", "fetch", "--depth=1", "origin", trustedRepoRev},
-		{"git", "checkout", "FETCH_HEAD"},
-	} {
-		log.Printf("Running %s", cmd)
-		cmdObj := exec.Command(cmd[0], cmd[1:]...)
-		cmdObj.Stdout = os.Stdout
-		cmdObj.Stderr = os.Stderr
-		cmdObj.Dir = trustedFirmwareDir
-		if err := cmdObj.Run(); err != nil {
-			log.Fatal(err)
-		}
+	if err = clone(trustedFirmwareDir,trustedFirmwareDir,trustedRepoRev); err != nil {
+		log.Fatal("Failed to clone Trusted Firmware:", err)
 	}
 
 	log.Printf("applying patches")
@@ -189,20 +198,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	for _, cmd := range [][]string{
-		{"git", "init"},
-		{"git", "remote", "add", "origin", uBootRepo},
-		{"git", "fetch", "--depth=1", "origin", ubootRev},
-		{"git", "checkout", "FETCH_HEAD"},
-	} {
-		log.Printf("Running %s", cmd)
-		cmdObj := exec.Command(cmd[0], cmd[1:]...)
-		cmdObj.Stdout = os.Stdout
-		cmdObj.Stderr = os.Stderr
-		cmdObj.Dir = ubootDir
-		if err := cmdObj.Run(); err != nil {
-			log.Fatal(err)
-		}
+	if err = clone(ubootDir, uBootRepo, ubootRev); err != nil {
+		log.Fatal("Failed to clone uboot repo:", err)
 	}
 
 	log.Printf("applying patches")

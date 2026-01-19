@@ -22,10 +22,11 @@ RUN apt-get update && apt-get install -y \
 {{ if (eq .Cross "arm64") -}}
   crossbuild-essential-arm64 \
 {{ end -}}
-  build-essential bc libssl-dev bison flex libelf-dev ncurses-dev ca-certificates zstd kmod python3
+  build-essential bc libssl-dev bison flex libelf-dev ncurses-dev ca-certificates zstd kmod python3 git
 
 COPY gokr-rebuild-kernel /usr/bin/gokr-rebuild-kernel
 COPY config.addendum.txt /usr/_src/config.addendum.txt
+COPY defconfig /usr/_src/defconfig
 COPY config.addendum.txt /usr/_src/.config
 COPY config.addendum.txt /usr/src/.config
 {{- range $idx, $path := .Patches }}
@@ -117,7 +118,7 @@ func rebuildKernel() error {
 	cross := flag.String("cross",
 		"arm64",
 		"if non-empty, cross-compile for the specified arch (one of 'arm64')")
-	tiny := flag.Bool("tiny", false, "Tries to use tinyconfig instead of defconfig")
+	persistent := flag.Bool("persistent", false, "Mounts a folder into the docker container to persist kernel source for debugging")
 
 	flavor := flag.String("flavor",
 		"vanilla",
@@ -239,13 +240,16 @@ func rebuildKernel() error {
 	}
 	kernelName := path.Base(string(upstreamURL))
 	_, err = os.Stat(kernelName)
-	log.Printf("Checking for downloaded kernel %s: %v", kernelName, err)
-	// dockerArgs = append(dockerArgs, fmt.Sprintf("--mount=type=tmpfs,tmpfs-size=%d%s,destination=%s,U", 5, "G", "/usr/src")) // Ramfs for faster build.... maybe
-	os.MkdirAll("./src_build", 0o777)
-	dockerArgs = append(dockerArgs, "-v", "./src_build:/usr/src")
+	log.Printf("Check for downloaded kernel %s: %v", kernelName, err)
 	if err == nil {
 		absKernelName, _ := filepath.Abs(kernelName)
 		dockerArgs = append(dockerArgs, "--volume", absKernelName+":/usr/src/"+kernelName)
+	}
+	if *persistent {
+		os.MkdirAll("./src_build", 0o777)
+		dockerArgs = append(dockerArgs, "-v", "./src_build:/usr/src")
+	} else {
+		dockerArgs = append(dockerArgs, fmt.Sprintf("--mount=type=tmpfs,tmpfs-size=%d%s,destination=%s,U", 5, "G", "/usr/src")) // Ramfs for faster build.... maybe
 	}
 
 	if !*keepBuildContainer {
@@ -258,7 +262,7 @@ func rebuildKernel() error {
 		"gokr-rebuild-kernel",
 		"-cross="+*cross,
 		"-flavor="+*flavor,
-		fmt.Sprintf("-tiny=%v", *tiny),
+		fmt.Sprintf("-persistent=%v", *persistent),
 		strings.TrimSpace(string(upstreamURL)))
 
 	dockerRun = exec.Command(executable, dockerArgs...)
@@ -269,7 +273,7 @@ func rebuildKernel() error {
 	if err := dockerRun.Run(); err != nil {
 		return fmt.Errorf("%s run: %v (cmd: %v)", execName, err, dockerRun.Args)
 	}
-	_=kernelPath
+
 	if err := copyFile(kernelPath, "vmlinuz"); err != nil {
 		return err
 	}
