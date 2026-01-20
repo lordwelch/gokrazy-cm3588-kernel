@@ -1,9 +1,0 @@
-# Aliases extracted from modules themselves.
-alias of:N*T*Cbrcm,iproc-sba-v2C* bcm_sba_raid
-alias of:N*T*Cbrcm,iproc-sba-v2 bcm_sba_raid
-alias of:N*T*Cbrcm,iproc-sbaC* bcm_sba_raid
-alias of:N*T*Cbrcm,iproc-sba bcm_sba_raid
-alias of:N*T*Csophgo,sg2044-dwmacC* dwmac_sophgo
-alias of:N*T*Csophgo,sg2044-dwmac dwmac_sophgo
-alias of:N*T*Csophgo,sg2042-dwmacC* dwmac_sophgo
-alias of:N*T*Csophgo,sg2042-dwmac dwmac_sophgo
