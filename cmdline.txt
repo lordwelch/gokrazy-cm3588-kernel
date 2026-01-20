@@ -1,1 +1,1 @@
-console=ttyS2,1500000 earlycon root=/dev/mmcblk0p2 rootwait panic=10 oops=panic init=/gokrazy/init sdhci.debug_quirks=0x40 sdhci.debug_quirks2=0x04
+console=ttyS2,1500000 earlycon root=/dev/mmcblk0p2 rootwait panic=10 oops=panic init=/gokrazy/init
