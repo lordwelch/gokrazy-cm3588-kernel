@@ -172,7 +172,6 @@ func main() {
 		}
 	}
 
-
 	patchPaths = patchPaths[0:0]
 	for _, filename := range atfPatchFiles {
 		path, err := find(filename)
@@ -181,7 +180,6 @@ func main() {
 		}
 		patchPaths = append(patchPaths, path)
 	}
-
 
 	err = os.MkdirAll(filepath.Join(tmp, "atf.patches"), 0750)
 	if err != nil {

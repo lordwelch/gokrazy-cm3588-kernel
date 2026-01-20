@@ -15,6 +15,9 @@ import (
 )
 
 func downloadKernel(latest string) error {
+	if _, err := os.Stat(filepath.Base(latest)); err == nil {
+		return nil
+	}
 	out, err := os.Create(filepath.Base(latest))
 	if err != nil {
 		return err

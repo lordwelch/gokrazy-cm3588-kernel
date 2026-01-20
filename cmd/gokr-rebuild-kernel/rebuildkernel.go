@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -185,6 +187,7 @@ func rebuildKernel() error {
 	if err != nil {
 		return err
 	}
+	upstreamURL = bytes.TrimSpace(upstreamURL)
 
 	dockerFile, err := os.Create("Dockerfile")
 	if err != nil {
@@ -232,6 +235,13 @@ func rebuildKernel() error {
 		"run",
 		// "--platform=linux/amd64",
 		"--volume", abs + ":/tmp/buildresult:Z",
+	}
+	kernel_name := path.Base(string(upstreamURL))
+	_, err = os.Stat(kernel_name)
+	log.Printf("Checking for downloaded kernel %s: %v", kernel_name, err)
+	if err == nil {
+		abs, _ := filepath.Abs(kernel_name)
+		dockerArgs = append(dockerArgs, "--volume", abs+":/usr/src/"+kernel_name)
 	}
 
 	if !*keepBuildContainer {

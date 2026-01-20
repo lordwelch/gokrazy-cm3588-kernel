@@ -21,7 +21,7 @@ const (
 )
 
 func applyPatches(srcdir, t string) error {
-	patches, err := filepath.Glob(t+".patches/*.patch")
+	patches, err := filepath.Glob(t + ".patches/*.patch")
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func compile(trustedFirmwareDir string) error {
 		"CROSS_COMPILE=aarch64-linux-gnu-",
 		"SOURCE_DATE_EPOCH="+strconv.Itoa(ubootTS),
 		fmt.Sprintf("BL31=%s/build/rk3588/release/bl31/bl31.elf", trustedFirmwareDir),
-		fmt.Sprintf("ROCKCHIP_TPL=%s","/usr/src/uboot.patches/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.16.bin"),
+		fmt.Sprintf("ROCKCHIP_TPL=%s", "/usr/src/uboot.patches/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.16.bin"),
 	)
 	make.Stdout = os.Stdout
 	make.Stderr = os.Stderr
