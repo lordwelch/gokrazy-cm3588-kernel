@@ -350,15 +350,6 @@ func indockerMain() {
 		if err := copyFile("/tmp/buildresult/vmlinuz.config", ".config"); err != nil {
 			log.Fatal(err)
 		}
-		dtbs, err := filepath.Glob("arch/arm64/boot/dts/*/*.dtb")
-		if err != nil {
-			log.Fatal(err)
-		}
-		for _, fn := range dtbs {
-			if err := copyFile(filepath.Join("/tmp/buildresult/", filepath.Base(fn)), fn); err != nil {
-				log.Fatal(err)
-			}
-		}
 
 		dtbos, err := filepath.Glob("arch/arm64/boot/dts/overlays/*.dtbo")
 		if err != nil {

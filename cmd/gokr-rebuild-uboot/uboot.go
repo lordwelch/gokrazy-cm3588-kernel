@@ -235,13 +235,12 @@ func rebuildUboot() {
 		log.Fatalf("%s run: %v (cmd: %v)", execName, err, dockerRun.Args)
 	}
 
-	for _, filename := range []string{
-		"boot.scr",
-		"u-boot-rockchip.bin",
-	} {
-		if err := copyFile(filename, filepath.Join(tmp, filename)); err != nil {
-			log.Fatal(err)
-		}
+	if err := copyFile("../boot.scr", "boot.scr"); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := copyFile("../u-boot-rockchip.bin", "u-boot-rockchip.bin"); err != nil {
+		log.Fatal(err)
 	}
 }
 

@@ -165,17 +165,16 @@ func rebuildKernel() error {
 		}
 	}
 
-	kernelPath, err := find("../vmlinuz")
+	kernelPath, err := filepath.Abs("../vmlinuz")
 	if err != nil {
 		return err
 	}
 
-	libPath, err := find("../lib")
+	libPath, err := filepath.Abs("../lib")
 	if err != nil {
 		return err
 	}
 
-	// TODO: just ensure the file exists, i.e. we are in _build
 	if _, err := find("config.addendum.txt"); err != nil {
 		return err
 	}
@@ -246,8 +245,12 @@ func rebuildKernel() error {
 		dockerArgs = append(dockerArgs, "--volume", absKernelName+":/usr/src/"+kernelName)
 	}
 	if *persistent {
-		os.MkdirAll("./src_build", 0o777)
-		dockerArgs = append(dockerArgs, "-v", "./src_build:/usr/src")
+		err = os.MkdirAll("./src_build", 0o777)
+		srcBuild, _ := filepath.Abs("./src_build")
+		if err != nil {
+			log.Fatal("Failed to create ./src_build", err)
+		}
+		dockerArgs = append(dockerArgs, "-v", srcBuild+":/usr/src")
 	} else {
 		dockerArgs = append(dockerArgs, fmt.Sprintf("--mount=type=tmpfs,tmpfs-size=%d%s,destination=%s,U", 5, "G", "/usr/src")) // Ramfs for faster build.... maybe
 	}
@@ -313,25 +316,6 @@ func rebuildKernel() error {
 	}
 
 	if *cross == "arm64" {
-		// downloadFirmware()
-		if *dtbs != "" {
-			// replace device tree files
-			rm = exec.Command("sh", "-c", "rm -f ../*.dtb")
-			rm.Stdout = os.Stdout
-			rm.Stderr = os.Stderr
-			log.Printf("%v", rm.Args)
-			if err := rm.Run(); err != nil {
-				log.Printf("%v: %v", rm.Args, err)
-			}
-			cp = exec.Command("sh", "-c", "cp *.dtb ..")
-			cp.Stdout = os.Stdout
-			cp.Stderr = os.Stderr
-			log.Printf("%v", cp.Args)
-			if err := cp.Run(); err != nil {
-				return fmt.Errorf("%v: %v", cp.Args, err)
-			}
-		}
-
 		if *flavor == "raspberrypi" {
 			// replace overlays directory
 			overlaysPath, err := find("../overlays")
@@ -357,71 +341,6 @@ func rebuildKernel() error {
 
 	return nil
 }
-
-// func _downloadFirmware() (*os.File, int64, error) {
-// 	latest := "https://gitlab.com/freedesktop-sdk/mirrors/kernel/linux/kernel/git/firmware/linux-firmware/-/raw/main/arm/mali/arch10.8/mali_csffw.bin"
-// 	if st, err := os.Stat(filepath.Base(latest)); err == nil {
-// 		out, err := os.Open(filepath.Base(latest))
-// 		if err != nil {
-// 			return nil, 0, nil
-// 		}
-// 		return out, st.Size(), nil
-// 	}
-// 	out, err := os.Create(filepath.Base(latest))
-// 	if err != nil {
-// 		return nil, 0, err
-// 	}
-// 	resp, err := http.Get(latest)
-// 	if err != nil {
-// 		out.Close()
-// 		return out, 0, err
-// 	}
-// 	defer resp.Body.Close()
-// 	if got, want := resp.StatusCode, http.StatusOK; got != want {
-// 		out.Close()
-// 		return out, 0, fmt.Errorf("unexpected HTTP status code for %s: got %d, want %d", latest, got, want)
-// 	}
-// 	size, err := io.Copy(out, resp.Body)
-// 	if err != nil {
-// 		out.Close()
-// 		return out, 0, err
-// 	}
-// 	if _, err := out.Seek(0, os.SEEK_SET); err != nil {
-// 		out.Close()
-// 		return out, 0, err
-// 	}
-// 	return out, size, nil
-// }
-
-// func downloadFirmware() error {
-// 	firmwareFile, size, err := _downloadFirmware()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer firmwareFile.Close()
-// 	err = os.MkdirAll("../_gokrazy", os.ModePerm)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	f, err := os.Create("../_gokrazy/extrafiles.tar")
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer f.Close()
-// 	t := tar.NewWriter(f)
-// 	if err := t.WriteHeader(&tar.Header{
-// 		Name:     "/lib/firmware/arm/mali/arch10.8/mali_csffw.bin",
-// 		Typeflag: tar.TypeReg,
-// 		Mode:     0o755,
-// 		Size:     size,
-// 	}); err != nil {
-// 		return err
-// 	}
-// 	if _, err := io.Copy(t, firmwareFile); err != nil {
-// 		return err
-// 	}
-// 	return t.Close()
-// }
 
 func main() {
 	if os.Getenv("GOKRAZY_IN_DOCKER") == "1" {
