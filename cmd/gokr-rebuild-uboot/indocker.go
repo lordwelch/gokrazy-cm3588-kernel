@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +18,8 @@ const (
 	ubootRev            = "ff498a3c5efb424accc1d825cc45cede2540ca13"
 	trustedFirmwareRepo = "https://github.com/ARM-software/arm-trusted-firmware"
 	trustedRepoRev      = "6251d6ed1ffa7080edc55fa75f525e19ecf5edbd"
+	rkbinRepo           = "https://github.com/friendlyarm/rkbin"
+	rkbinRev            = "nanopi6"
 )
 
 func applyPatches(srcdir, t string) error {
@@ -45,15 +48,16 @@ func applyPatches(srcdir, t string) error {
 	return nil
 }
 
-func compile(trustedFirmwareDir string) error {
+func compile(ubootDir, trustedFirmwareDir string) error {
 	defconfig := exec.Command("make", "ARCH=arm64", "cm3588-nas-rk3588_defconfig")
 	defconfig.Stdout = os.Stdout
 	defconfig.Stderr = os.Stderr
+	defconfig.Dir = ubootDir
 	if err := defconfig.Run(); err != nil {
 		return fmt.Errorf("make defconfig: %v", err)
 	}
 
-	f, err := os.OpenFile(".config", os.O_RDWR|os.O_APPEND, 0o755)
+	f, err := os.OpenFile(filepath.Join(ubootDir, ".config"), os.O_RDWR|os.O_APPEND, 0o755)
 	if err != nil {
 		return err
 	}
@@ -69,12 +73,14 @@ CONFIG_BOOTCOMMAND="setenv bootmeths script; bootflow scan -lb"
 	}
 
 	cmd := exec.Command("git", "show", "-s", "--date=unix", "--pretty=format:%ad", "HEAD")
+	cmd.Dir = ubootDir
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("unable to get date of git repo: %w", err)
 	}
 
 	make := exec.Command("make", "-j"+strconv.Itoa(runtime.NumCPU()))
+	make.Dir = ubootDir
 	make.Env = append(os.Environ(),
 		"ARCH=arm64",
 		"CROSS_COMPILE=aarch64-linux-gnu-",
@@ -91,13 +97,14 @@ CONFIG_BOOTCOMMAND="setenv bootmeths script; bootflow scan -lb"
 	return nil
 }
 
-func generateBootScr(bootCmdPath string) error {
-	mkimage := exec.Command("./tools/mkimage", "-A", "arm", "-T", "script", "-C", "none", "-d", bootCmdPath, "boot.scr")
+func generateBootScr(ubootDir, bootCmdPath string) error {
+	mkimage := exec.Command(filepath.Join(ubootDir, "./tools/mkimage"), "-A", "arm", "-T", "script", "-C", "none", "-d", bootCmdPath, "boot.scr")
 	mkimage.Env = append(os.Environ(),
 		"ARCH=arm64",
 		"CROSS_COMPILE=aarch64-linux-gnu-",
 		"SOURCE_DATE_EPOCH=1600000000",
 	)
+	mkimage.Dir = ubootDir
 	mkimage.Stdout = os.Stdout
 	mkimage.Stderr = os.Stderr
 	if err := mkimage.Run(); err != nil {
@@ -135,14 +142,20 @@ func copyFile(dest, src string) error {
 }
 
 func clone(dir string, repo string, rev string) error {
-
-
-	for _, cmd := range [][]string{
+	err := os.Mkdir(dir, 0o777)
+	if err != nil && !errors.Is(err, os.ErrExist) {
+		log.Fatal(err)
+	}
+	var commands = [][]string{
 		{"git", "init"},
 		{"git", "remote", "add", "origin", repo},
 		{"git", "fetch", "--depth=1", "origin", rev},
 		{"git", "checkout", "FETCH_HEAD"},
-	} {
+	}
+	if _, err = os.Stat(filepath.Join(dir, ".git")); err == nil {
+		commands = commands[2:]
+	}
+	for _, cmd := range commands {
 		log.Printf("Running %s", cmd)
 		cmdObj := exec.Command(cmd[0], cmd[1:]...)
 		cmdObj.Stdout = os.Stdout
@@ -155,18 +168,9 @@ func clone(dir string, repo string, rev string) error {
 	return nil
 }
 
-func main() {
-	ubootDir, err := os.MkdirTemp("", "u-boot")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	trustedFirmwareDir, err := os.MkdirTemp("", "arm-trusted-firmware")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err = clone(trustedFirmwareDir,trustedFirmwareDir,trustedRepoRev); err != nil {
+func compileATF() string {
+	trustedFirmwareDir, _ := filepath.Abs("arm-trusted-firmware")
+	if err := clone(trustedFirmwareDir, trustedFirmwareRepo, trustedRepoRev); err != nil {
 		log.Fatal("Failed to clone Trusted Firmware:", err)
 	}
 
@@ -186,19 +190,43 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	return trustedFirmwareDir
+}
 
-	var bootCmdPath string
-	if p, err := filepath.Abs("uboot.patches/boot.cmd"); err != nil {
-		log.Fatal(err)
-	} else {
-		bootCmdPath = p
+func downloadRKbin() string {
+	var err error = nil
+	rkbinDir, _ := filepath.Abs("rkbin")
+
+	if err = clone(rkbinDir, rkbinRepo, rkbinRev); err != nil {
+		log.Fatal("Failed to clone rkbin Firmware:", err)
 	}
 
-	if err := os.Chdir(ubootDir); err != nil {
+	log.Printf("applying patches")
+	if err := applyPatches(rkbinDir, "rkbin"); err != nil {
 		log.Fatal(err)
 	}
+	return rkbinDir
+}
 
-	if err = clone(ubootDir, uBootRepo, ubootRev); err != nil {
+func indockerMain() {
+
+	srcFiles, err := filepath.Glob("/usr/_src/*")
+	if err != nil {
+		log.Fatalf("failed to find source files: %v", err)
+	}
+	for _, fileName := range srcFiles {
+		cmdObj := exec.Command("cp", "-r", "-t", "/usr/src", fileName)
+		cmdObj.Stdout = os.Stdout
+		cmdObj.Stderr = os.Stderr
+		if err := cmdObj.Run(); err != nil {
+			log.Fatal(err)
+		}
+	}
+	rkbinDir := compileATF()
+	bootCmdPath, _ := filepath.Abs("uboot.patches/boot.cmd")
+
+	ubootDir, _ := filepath.Abs("u-boot")
+	if err := clone(ubootDir, uBootRepo, ubootRev); err != nil {
 		log.Fatal("Failed to clone uboot repo:", err)
 	}
 
@@ -208,23 +236,23 @@ func main() {
 	}
 
 	log.Printf("compiling uboot")
-	if err := compile(trustedFirmwareDir); err != nil {
+	if err := compile(ubootDir, rkbinDir); err != nil {
 		log.Fatal(err)
 	}
 
 	log.Printf("generating boot.scr")
-	if err := generateBootScr(bootCmdPath); err != nil {
+	if err := generateBootScr(ubootDir, bootCmdPath); err != nil {
 		log.Fatal(err)
 	}
 
 	for _, copyCfg := range []struct {
 		dest, src string
 	}{
-		{"boot.scr", "boot.scr"},
-		{"u-boot-rockchip.bin", "u-boot-rockchip.bin"},
+		{"boot.scr", "u-boot/boot.scr"},
+		{"u-boot-rockchip.bin", "u-boot/u-boot-rockchip.bin"},
 	} {
 		if err := copyFile(filepath.Join("/tmp/buildresult", copyCfg.dest), copyCfg.src); err != nil {
-			log.Fatal(err)
+			log.Fatal("indocker ", err)
 		}
 	}
 }

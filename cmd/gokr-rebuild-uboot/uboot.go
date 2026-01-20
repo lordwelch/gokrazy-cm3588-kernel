@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -17,19 +16,21 @@ const dockerFileContents = `
 FROM docker.io/library/debian:trixie
 
 RUN apt-get update && apt-get install -y build-essential crossbuild-essential-arm64 bc libssl-dev bison flex git python3 python3-setuptools swig python3-dev python3-pyelftools uuid-dev libgnutls28-dev
+RUN apt-get install -y device-tree-compiler
 
 COPY gokr-build-uboot /usr/bin/gokr-build-uboot
-RUN mkdir -p /usr/src/atf.patches
-RUN mkdir -p /usr/src/uboot.patches
+RUN mkdir -p /usr/_src/atf.patches
+RUN mkdir -p /usr/_src/uboot.patches
 {{- range $idx, $path := .Patches }}
-COPY {{ $path }} /usr/src/{{ $path }}
+COPY {{ $path }} /usr/_src/{{ $path }}
 {{- end }}
 
 RUN echo 'builduser:x:{{ .Uid }}:{{ .Gid }}:nobody:/:/bin/sh' >> /etc/passwd && \
-    chown -R {{ .Uid }}:{{ .Gid }} /usr/src
+    chown -R {{ .Uid }}:{{ .Gid }} /usr/src /usr/_src
 
 USER builduser
 WORKDIR /usr/src
+ENV GOKRAZY_IN_DOCKER=1
 ENTRYPOINT /usr/bin/gokr-build-uboot
 `
 
@@ -43,49 +44,15 @@ var dockerFileTmpl = template.Must(template.New("dockerfile").
 
 var ubootPatchFiles = []string{
 	"uboot.patches/boot.cmd",
+	"uboot.patches/rk3588_bl31_v1.46.elf",
 	"uboot.patches/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.16.bin",
+	"uboot.patches/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.17.bin",
 }
+
 var atfPatchFiles = []string{
 	// "atf.patches/feat-rk3588-support-rk3588.patch",
 	// "atf.patches/rk3588-enable-crypto-function.patch",
 	// "atf.patches/feat-rockchip-support-SCMI-for-clock-reset-domain.patch",
-}
-
-func copyFile(dest, src string) error {
-	out, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-
-	st, err := in.Stat()
-	if err != nil {
-		return err
-	}
-	if err := out.Chmod(st.Mode()); err != nil {
-		return err
-	}
-	return out.Close()
-}
-
-var gopath = mustGetGopath()
-
-func mustGetGopath() string {
-	gopathb, err := exec.Command("go", "env", "GOPATH").Output()
-	if err != nil {
-		log.Panic(err)
-	}
-	return strings.TrimSpace(string(gopathb))
 }
 
 func find(filename string) (string, error) {
@@ -93,12 +60,7 @@ func find(filename string) (string, error) {
 		return filename, nil
 	}
 
-	path := filepath.Join(gopath, "src", "gitea.narnian.us", "lordwelch", "gokrazy-cm3588-kernel", filename)
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
-	}
-
-	return "", fmt.Errorf("could not find file %q (looked in . and %s)", filename, path)
+	return "", fmt.Errorf("could not find file %q", filename)
 }
 
 func getContainerExecutable() (string, error) {
@@ -119,14 +81,23 @@ func getContainerExecutable() (string, error) {
 	return "", fmt.Errorf("none of %v found in $PATH", choices)
 }
 
-func main() {
-	var overwriteContainerExecutable = flag.String("overwrite_container_executable",
+func rebuildUboot() {
+	overwriteContainerExecutable := flag.String("overwrite_container_executable",
 		"",
 		"E.g. docker or podman to overwrite the automatically detected container executable")
+	persistent := flag.Bool("persistent", false, "Mounts a folder into the docker container to persist u-boot source for debugging")
 	flag.Parse()
 	executable, err := getContainerExecutable()
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	abs, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if !strings.HasSuffix(strings.TrimSuffix(abs, "/"), "/_build") {
+		log.Fatalf("gokr-rebuild-uboot is not run from a _build directory")
 	}
 	if *overwriteContainerExecutable != "" {
 		executable = *overwriteContainerExecutable
@@ -140,15 +111,15 @@ func main() {
 		log.Fatal(err)
 	}
 	defer os.RemoveAll(tmp)
-
-	cmd := exec.Command("go", "build", "-o", tmp, "gitea.narnian.us/lordwelch/gokrazy-cm3588-kernel/cmd/gokr-build-uboot")
-	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0")
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		log.Fatalf("%v: %v", cmd.Args, err)
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Fatal("Unable to find current executable", err)
 	}
-
 	buildPath := filepath.Join(tmp, "gokr-build-uboot")
+	err = copyFile(buildPath, exePath)
+	if err != nil {
+		log.Fatal("Unable to copy executable for docker", err)
+	}
 
 	var patchPaths []string
 
@@ -160,7 +131,7 @@ func main() {
 		patchPaths = append(patchPaths, path)
 	}
 
-	err = os.MkdirAll(filepath.Join(tmp, "uboot.patches"), 0750)
+	err = os.MkdirAll(filepath.Join(tmp, "uboot.patches"), 0o750)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -181,7 +152,7 @@ func main() {
 		patchPaths = append(patchPaths, path)
 	}
 
-	err = os.MkdirAll(filepath.Join(tmp, "atf.patches"), 0750)
+	err = os.MkdirAll(filepath.Join(tmp, "atf.patches"), 0o750)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -222,7 +193,7 @@ func main() {
 
 	log.Printf("building %s container for uboot compilation", execName)
 
-	dockerBuild := exec.Command(execName,
+	dockerBuild := exec.Command(executable,
 		"build",
 		"--rm=true",
 		"--tag=gokr-rebuild-uboot",
@@ -237,20 +208,26 @@ func main() {
 	log.Printf("compiling uboot")
 
 	var dockerRun *exec.Cmd
-	if execName == "podman" {
-		dockerRun = exec.Command(executable,
-			"run",
-			"--userns=keep-id",
-			"--rm",
-			"--volume", tmp+":/tmp/buildresult:Z",
-			"gokr-rebuild-uboot")
-	} else {
-		dockerRun = exec.Command(executable,
-			"run",
-			"--rm",
-			"--volume", tmp+":/tmp/buildresult:Z",
-			"gokr-rebuild-uboot")
+	dockerArgs := []string{
+		"run",
+		// "--platform=linux/amd64",
+		"--volume", tmp + ":/tmp/buildresult:Z",
 	}
+	if *persistent {
+		err = os.MkdirAll("./src_build", 0o777)
+		srcBuild, _ := filepath.Abs("./src_build")
+		if err != nil {
+			log.Fatal("Failed to create ./src_build", err)
+		}
+		dockerArgs = append(dockerArgs, "-v", srcBuild+":/usr/src")
+	} else {
+		dockerArgs = append(dockerArgs, fmt.Sprintf("--mount=type=tmpfs,tmpfs-size=%d%s,destination=%s,U", 5, "G", "/usr/src")) // Ramfs for faster build.... maybe
+	}
+	if execName == "podman" {
+		dockerArgs = append(dockerArgs, "--userns=keep-id")
+	}
+	dockerArgs = append(dockerArgs, "gokr-rebuild-uboot")
+	dockerRun = exec.Command(executable, dockerArgs...)
 	dockerRun.Dir = tmp
 	dockerRun.Stdout = os.Stdout
 	dockerRun.Stderr = os.Stderr
@@ -265,5 +242,13 @@ func main() {
 		if err := copyFile(filename, filepath.Join(tmp, filename)); err != nil {
 			log.Fatal(err)
 		}
+	}
+}
+
+func main() {
+	if os.Getenv("GOKRAZY_IN_DOCKER") == "1" {
+		indockerMain()
+	} else {
+		rebuildUboot()
 	}
 }

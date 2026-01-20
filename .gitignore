@@ -1,0 +1,12 @@
+/_build/lib
+/_build/vmlinuz
+/_build/vmlinuz.config
+/_build/u-boot-rockchip.bin
+/_build/dtbs
+/_build/*.dtb
+/_build/gokr-rebuild*
+/_build/overlays
+/_build/Dockerfile
+/_build/src_build
+/_build/*.tar.gz
+/_build/*.tar.xz
