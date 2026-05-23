@@ -22,6 +22,7 @@ var (
 
 func downloadKernel(latest string) error {
 	if _, err := os.Stat(filepath.Base(latest)); err == nil {
+		log.Printf("Kernel found skipping download")
 		return nil
 	}
 	out, err := os.Create(filepath.Base(latest))
@@ -317,11 +318,13 @@ func indockerMain() {
 		newFile.Close()
 	}
 
-	log.Printf("applying patches")
 	if unpacked {
+	log.Printf("applying patches")
 		if err := applyPatches(srcdir); err != nil {
 			log.Fatal(err)
 		}
+	} else {
+		log.Printf("Skipping patches as this is a persistent build")
 	}
 	firmwarePaths, err := downloadFirmware()
 	if err != nil {

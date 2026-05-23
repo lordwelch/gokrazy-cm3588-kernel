@@ -1,0 +1,2 @@
+kernel/drivers/dma/bcm-sba-raid.ko:
+kernel/drivers/net/ethernet/stmicro/stmmac/dwmac-sophgo.ko:

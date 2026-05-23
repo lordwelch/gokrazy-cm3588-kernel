@@ -251,6 +251,9 @@ func rebuildKernel() error {
 			log.Fatal("Failed to create ./src_build", err)
 		}
 		dockerArgs = append(dockerArgs, "-v", srcBuild+":/usr/src")
+		for _, patch := range patches {
+			os.Remove(filepath.Join("src_build", filepath.Base(patch)))
+		}
 	} else {
 		dockerArgs = append(dockerArgs, fmt.Sprintf("--mount=type=tmpfs,tmpfs-size=%d%s,destination=%s,U", 5, "G", "/usr/src")) // Ramfs for faster build.... maybe
 	}

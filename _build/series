@@ -17,14 +17,7 @@ general-pl330-05-fix-unbalanced-power-down.patch
 general-pl330-06-fix-buffer-underruns.patch
 general-possibility-of-disabling-rk808-rtc.patch
 general-rk808-configurable-switch-voltage-steps.patch
-general-v4l2-iep-driver.patch
-media-0001-Add-rkvdec-Support-v5.patch
-media-0002-media-rkvdec-remove-vb2_is_busy-check-in-rkvdec_s_ct.patch
-media-0002-v4l2-core-Initialize-h264-frame_mbs_only_flag-.patch
-media-0003-rk3568-disable-hantro-h264.patch
-net-ethernet-realtek-add-r8169-LED-configuration-from-OF.patch
 regulator-add-fan53200-driver.patch
 rk3588-0010-fix-clk-divisions.patch
 rk3588-1063-arm64-dts-rockchip-Enable-automatic-fan-control-on-t.patch
-rk3588-1201-arm64-dts-rockchip-Enable-the-NPU-on-CM3588.patch
 rk35xx-montjoie-crypto-v2-rk35xx.patch
